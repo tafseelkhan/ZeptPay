@@ -23,7 +23,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { getCurrencySymbol } from '../../../../utils/currency';
 import { useTheme } from '../../../../contexts/theme/ThemeContext';
-import BottomNavigation from '../../../home/test/BottomNavigation';
+import BottomNavigation from '../BottomNavigation';
 
 const { width, height } = Dimensions.get('window');
 

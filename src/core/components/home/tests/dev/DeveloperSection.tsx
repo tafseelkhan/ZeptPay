@@ -21,7 +21,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../../../contexts/theme/ThemeContext';
-import BottomNavigation from '../../../home/test/BottomNavigation';
+import BottomNavigation from '../BottomNavigation';
 
 const { width } = Dimensions.get('window');
 
