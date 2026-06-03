@@ -5,12 +5,12 @@ import SplashScreen from '../screens/animations/SplashScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 // import UserHomeScreen from '../screens/Home/UserHomeScreen';
-import DeveloperHomeScreen from '../screens/tests/home/dev/DeveloperHomeScreen';
-import WebhookHomeScreen from '../screens/tests/home/webhook/WebhookHomeScreen';
+import DeveloperHomeScreen from '../screens/tests/home/dev/developerHomeScreen';
+import WebhookHomeScreen from '../screens/tests/home/webhook/webhookHomeScreen';
 import ZeptCapturedScreen from '../screens/tests/home/zeptcaptured/zeptcaptured';
-import WebhookScreen from '../screens/tests/home/webhook/WebhookScreen';
-import DeveloperScreen from '../screens/tests/home/dev/Developer';
-import SettingScreen from '../screens/tests/home/settings/SettingScreen';
+import WebhookScreen from '../screens/tests/home/webhook/webhookScreen';
+import DeveloperScreen from '../screens/tests/home/dev/developerApiKeys';
+import SettingScreen from '../screens/tests/home/settings/settingScreen';
 
 // ✅ Complete RootStackParamList with all screens
 export type RootStackParamList = {

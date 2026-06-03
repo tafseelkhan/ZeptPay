@@ -1,3 +1,4 @@
+// screens/ApiKeysScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,11 +10,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Dimensions,
-  Animated,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -23,293 +21,40 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../../../contexts/theme/ThemeContext';
 import BottomNavigation from '../BottomNavigation';
 
+// Import types
+import { ApiKey, ApiKeysResponse } from '../../../../types/DeveloperType';
+
+// Import services
+import {
+  fetchAllApiKeys,
+  toggleApiKey,
+  toggleApiKeyPermission,
+  getOtherActiveKeysCount,
+  formatDate,
+  maskKey,
+  getModeColor,
+  getStatusColor,
+  getPaymentMethodIcon,
+  getPaymentMethodDescription,
+} from '../../../../services/tests/developerApiKeys/apiKeysService';
+
+// Import utils
+import {
+  getToggleConfirmationMessage,
+  getThemeColors,
+  getApiKeyStats,
+  isKeyAvailable,
+} from '../../../../utils/tests/developerApiKeys/apiKeysUtils';
+
+// Import this components modules
+import CustomToggle from '../../../../modules/tests/developerApiKeys/CustomToggle';
+import PermissionRow from '../../../../modules/tests/developerApiKeys/PermissionRow';
+import PermissionCard from '../../../../modules/tests/developerApiKeys/PermissionCard';
+
 const { width } = Dimensions.get('window');
 
-// Define types based on your API response
-interface PaymentMethod {
-  enabled: boolean;
-}
-
-interface PaymentMethods {
-  card: PaymentMethod;
-  zeptpay: PaymentMethod;
-  upi: PaymentMethod;
-  netBanking: PaymentMethod;
-  wallet: PaymentMethod;
-  autopay: PaymentMethod;
-  banktransfer: PaymentMethod;
-  qrpayment: PaymentMethod;
-}
-
-interface Payments {
-  enabled: boolean;
-  supportsCurrencyConversion: boolean;
-  paymentIntents: boolean;
-}
-
-interface Permissions {
-  payments: Payments;
-  paymentMethods: PaymentMethods;
-  customers: { enabled: boolean };
-  refunds: { enabled: boolean };
-  webhooks: { enabled: boolean };
-  payouts: { enabled: boolean };
-  transfers: { enabled: boolean };
-  connect: { enabled: boolean };
-  subscriptions: { enabled: boolean };
-}
-
-interface ApiKey {
-  _id: string;
-  keyName: string;
-  mode: 'test' | 'live';
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  publicKey: string;
-  secretKey: string;
-  label?: string;
-  permissions?: Permissions;
-}
-
-interface UserInfo {
-  id: string;
-  name: string;
-  phone: string;
-  isDeveloper: boolean;
-  isLive: boolean;
-}
-
-interface ApiKeysResponse {
-  user: UserInfo;
-  keys: ApiKey[];
-}
-
-// AsyncStorage key for auth token
-const AUTH_TOKEN_KEY = 'authToken';
-
-// Custom Toggle Switch Component (Larger) - Theme aware
-const CustomToggle: React.FC<{
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-  disabled?: boolean;
-  size?: 'normal' | 'large';
-}> = ({ value, onValueChange, disabled = false, size = 'normal' }) => {
-  const [animatedValue] = useState(new Animated.Value(value ? 1 : 0));
-
-  useEffect(() => {
-    Animated.timing(animatedValue, {
-      toValue: value ? 1 : 0,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
-  }, [value]);
-
-  const trackWidth = size === 'large' ? 56 : 44;
-  const trackHeight = size === 'large' ? 32 : 24;
-  const thumbSize = size === 'large' ? 28 : 20;
-  const thumbPosition = size === 'large' ? 2 : 2;
-  const activePosition = size === 'large' ? 26 : 22;
-
-  const toggleColor = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['#E5E7EB', '#10B981'],
-  });
-
-  const togglePosition = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [thumbPosition, activePosition],
-  });
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={() => !disabled && onValueChange(!value)}
-      disabled={disabled}
-    >
-      <Animated.View
-        style={[
-          styles.toggleTrack,
-          {
-            width: trackWidth,
-            height: trackHeight,
-            borderRadius: trackHeight / 2,
-            backgroundColor: toggleColor,
-          },
-        ]}
-      >
-        <Animated.View
-          style={[
-            styles.toggleThumb,
-            {
-              width: thumbSize,
-              height: thumbSize,
-              borderRadius: thumbSize / 2,
-              left: togglePosition,
-              top: (trackHeight - thumbSize) / 2,
-            },
-          ]}
-        />
-      </Animated.View>
-    </TouchableOpacity>
-  );
-};
-
-// Get token from AsyncStorage
-const getAuthToken = async (): Promise<string | null> => {
-  try {
-    const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-    return token;
-  } catch (error) {
-    console.error('Error getting auth token:', error);
-    return null;
-  }
-};
-
-// API call function
-const fetchUserApiKeys = async (token: string) => {
-  try {
-    console.log('📡 Sending API request...');
-    console.log('URL:', `http://172.20.10.12:7000/api/test-live/api-keys/user`);
-
-    const response = await axios.get(
-      `http://172.20.10.12:7000/api/test-live/api-keys/user`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000,
-      },
-    );
-
-    return response.data;
-  } catch (error: any) {
-    if (error.response) {
-      throw {
-        status: error.response.status,
-        message:
-          error.response.data?.message || `Error ${error.response.status}`,
-      };
-    } else if (error.request) {
-      throw {
-        status: 0,
-        message:
-          'Cannot connect to server. Please check your internet connection.',
-      };
-    } else {
-      throw {
-        status: 0,
-        message: error.message || 'An unexpected error occurred.',
-      };
-    }
-  }
-};
-
-// Toggle API Key function
-const toggleApiKeyStatus = async (
-  apiKeyId: string,
-  token: string,
-  currentStatus: boolean,
-) => {
-  try {
-    const response = await axios.patch(
-      `http://172.20.10.12:7000/api/test-live/api-keys/${apiKeyId}/toggle`,
-      { isActive: !currentStatus },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000,
-      },
-    );
-
-    return response.data;
-  } catch (error: any) {
-    if (error.response) {
-      throw {
-        status: error.response.status,
-        message:
-          error.response.data?.message || `Error ${error.response.status}`,
-      };
-    } else if (error.request) {
-      throw {
-        status: 0,
-        message:
-          'Cannot connect to server. Please check your internet connection.',
-      };
-    } else {
-      throw {
-        status: 0,
-        message: error.message || 'An unexpected error occurred.',
-      };
-    }
-  }
-};
-
-// Toggle Permission function with API integration
-const togglePermission = async (
-  apiKeyId: string,
-  permissionPath: string,
-  currentValue: boolean,
-  token: string,
-) => {
-  try {
-    console.log('🔄 Toggling permission:', permissionPath);
-    console.log('Current value:', currentValue);
-    console.log(
-      'URL:',
-      `http://172.20.10.12:7000/api/test-live/api-keys/${apiKeyId}/permissions`,
-    );
-
-    const updatePayload: any = {};
-    const pathParts = permissionPath.split('.');
-
-    let current = updatePayload;
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      current[pathParts[i]] = {};
-      current = current[pathParts[i]];
-    }
-    current[pathParts[pathParts.length - 1]] = !currentValue;
-
-    const response = await axios.patch(
-      `http://172.20.10.12:7000/api/test-live/api-keys/${apiKeyId}/permissions`,
-      updatePayload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000,
-      },
-    );
-
-    return response.data;
-  } catch (error: any) {
-    if (error.response) {
-      throw {
-        status: error.response.status,
-        message:
-          error.response.data?.message || `Error ${error.response.status}`,
-      };
-    } else if (error.request) {
-      throw {
-        status: 0,
-        message:
-          'Cannot connect to server. Please check your internet connection.',
-      };
-    } else {
-      throw {
-        status: 0,
-        message: error.message || 'An unexpected error occurred.',
-      };
-    }
-  }
-};
-
 const ApiKeysScreen: React.FC = () => {
-  const { isDark, resolvedTheme } = useTheme();
+  const { isDark } = useTheme();
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [apiKeysData, setApiKeysData] = useState<ApiKeysResponse | null>(null);
@@ -321,49 +66,23 @@ const ApiKeysScreen: React.FC = () => {
   );
   const [activeTab, setActiveTab] = useState<string>('developers');
 
-  // Theme-based colors
-  const themeColors = {
-    background: isDark ? '#0F172A' : '#F9FAFB',
-    cardBackground: isDark ? '#1E293B' : '#FFFFFF',
-    text: isDark ? '#F1F5F9' : '#1F2937',
-    textSecondary: isDark ? '#94A3B8' : '#6B7280',
-    textTertiary: isDark ? '#64748B' : '#9CA3AF',
-    border: isDark ? '#334155' : '#E5E7EB',
-    borderLight: isDark ? '#1E293B' : '#F3F4F6',
-    primary: '#3B82F6',
-    success: '#10B981',
-    error: '#EF4444',
-    warning: '#F59E0B',
-    headerBackground: '#3B82F6',
-  };
+  const themeColors = getThemeColors(isDark);
 
   const fetchApiKeys = async () => {
     try {
       setError(null);
       setLoading(true);
 
-      const token = await getAuthToken();
+      const result = await fetchAllApiKeys();
 
-      if (!token) {
-        setError('Authentication required. Please login first.');
-        setLoading(false);
-        return;
+      if (result.success && result.data) {
+        setApiKeysData(result.data);
+      } else {
+        setError(result.error || 'Failed to load API keys.');
       }
-
-      const data = await fetchUserApiKeys(token);
-      setApiKeysData(data);
     } catch (err: any) {
       console.error('Fetch error:', err);
-
-      if (err.status === 401) {
-        setError('Session expired. Please login again.');
-      } else if (err.status === 404) {
-        setError('API endpoint not found. Please check the server.');
-      } else if (err.status === 500) {
-        setError('Server error. Please try again later.');
-      } else {
-        setError(err.message || 'Failed to load API keys.');
-      }
+      setError(err.message || 'Failed to load API keys.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -386,16 +105,12 @@ const ApiKeysScreen: React.FC = () => {
     try {
       setTogglingKeyId(apiKeyId);
 
-      const token = await getAuthToken();
-
-      if (!token) {
-        Alert.alert('Error', 'Authentication required. Please login first.');
-        return;
-      }
-
       const keyToToggle = apiKeysData?.keys.find(k => k._id === apiKeyId);
+      if (!keyToToggle) return;
+
       const newStatus = !currentStatus;
 
+      // Optimistic update
       setApiKeysData(prev => {
         if (!prev || !keyToToggle) return prev;
 
@@ -423,36 +138,28 @@ const ApiKeysScreen: React.FC = () => {
         }
       });
 
-      const response = await toggleApiKeyStatus(apiKeyId, token, currentStatus);
-      fetchApiKeys();
+      const result = await toggleApiKey(apiKeyId, currentStatus);
 
-      Alert.alert(
-        'Success',
-        response?.message ||
-          `API key has been ${
-            !currentStatus ? 'activated' : 'deactivated'
-          } successfully.`,
-        [{ text: 'OK' }],
-      );
+      if (result.success) {
+        await fetchApiKeys(); // Refresh to get latest data
+        Alert.alert(
+          'Success',
+          result.message || 'API key status updated successfully.',
+        );
+      } else {
+        await fetchApiKeys(); // Revert optimistic update
+        Alert.alert(
+          'Error',
+          result.error || 'Failed to toggle API key status.',
+        );
+      }
     } catch (err: any) {
       console.error('Toggle error:', err);
-      fetchApiKeys();
-
-      let errorMessage = 'Failed to toggle API key status.';
-
-      if (err.status === 400) {
-        errorMessage = 'Invalid request. Please check the parameters.';
-      } else if (err.status === 401) {
-        errorMessage = 'Session expired. Please login again.';
-      } else if (err.status === 404) {
-        errorMessage = 'API key not found.';
-      } else if (err.status === 500) {
-        errorMessage = 'Server error. Please try again later.';
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-
-      Alert.alert('Error', errorMessage, [{ text: 'OK' }]);
+      await fetchApiKeys();
+      Alert.alert(
+        'Error',
+        'Failed to toggle API key status. Please try again.',
+      );
     } finally {
       setTogglingKeyId(null);
     }
@@ -462,18 +169,11 @@ const ApiKeysScreen: React.FC = () => {
     apiKeyId: string,
     permissionPath: string,
     currentValue: boolean,
-    permissionName: string,
   ) => {
     try {
       setTogglingPermission(`${apiKeyId}-${permissionPath}`);
 
-      const token = await getAuthToken();
-
-      if (!token) {
-        Alert.alert('Error', 'Authentication required. Please login first.');
-        return;
-      }
-
+      // Optimistic update
       setApiKeysData(prev => {
         if (!prev) return prev;
 
@@ -484,9 +184,10 @@ const ApiKeysScreen: React.FC = () => {
 
             if (pathParts.length === 2) {
               const [parent, child] = pathParts;
-              if (newPermissions[parent as keyof Permissions]) {
-                (newPermissions[parent as keyof Permissions] as any)[child] =
-                  !currentValue;
+              if (newPermissions[parent as keyof typeof newPermissions]) {
+                (newPermissions[parent as keyof typeof newPermissions] as any)[
+                  child
+                ] = !currentValue;
               }
             }
 
@@ -498,14 +199,20 @@ const ApiKeysScreen: React.FC = () => {
         return { ...prev, keys: updatedKeys };
       });
 
-      await togglePermission(apiKeyId, permissionPath, currentValue, token);
-      fetchApiKeys();
+      const result = await toggleApiKeyPermission(
+        apiKeyId,
+        permissionPath,
+        currentValue,
+      );
+
+      if (!result.success) {
+        await fetchApiKeys(); // Revert on error
+        Alert.alert('Error', result.error || 'Failed to toggle permission.');
+      }
     } catch (error) {
       console.error('Permission toggle error:', error);
-      fetchApiKeys();
-      Alert.alert('Error', 'Failed to toggle permission. Please try again.', [
-        { text: 'OK' },
-      ]);
+      await fetchApiKeys();
+      Alert.alert('Error', 'Failed to toggle permission. Please try again.');
     } finally {
       setTogglingPermission(null);
     }
@@ -515,36 +222,26 @@ const ApiKeysScreen: React.FC = () => {
     apiKeyId: string,
     currentStatus: boolean,
     keyName: string,
+    mode: 'test' | 'live',
   ) => {
-    const action = currentStatus ? 'deactivate' : 'activate';
-    const apiKey = apiKeysData?.keys.find(k => k._id === apiKeyId);
-    const mode = apiKey?.mode || '';
+    const otherActiveKeysCount = apiKeysData
+      ? getOtherActiveKeysCount(apiKeysData.keys, apiKeyId, mode)
+      : 0;
 
-    let message = `Are you sure you want to ${action} the "${keyName}" key?`;
-
-    if (!currentStatus) {
-      const otherActiveKeys =
-        apiKeysData?.keys.filter(
-          k => k._id !== apiKeyId && k.mode === mode && k.isActive,
-        ) || [];
-
-      if (otherActiveKeys.length > 0) {
-        message += `\n\n⚠️ Note: Activating this ${mode} key will deactivate ${otherActiveKeys.length} other ${mode} key(s).`;
-      }
-    } else {
-      message += `\n\n⚠️ Note: This key will no longer work for API requests.`;
-    }
+    const message = getToggleConfirmationMessage(
+      keyName,
+      currentStatus,
+      mode,
+      otherActiveKeysCount,
+    );
 
     Alert.alert(
-      `${action.charAt(0).toUpperCase() + action.slice(1)} API Key`,
+      `${currentStatus ? 'Deactivate' : 'Activate'} API Key`,
       message,
       [
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: action.charAt(0).toUpperCase() + action.slice(1),
+          text: currentStatus ? 'Deactivate' : 'Activate',
           style: currentStatus ? 'destructive' : 'default',
           onPress: () => handleToggleApiKey(apiKeyId, currentStatus),
         },
@@ -553,161 +250,17 @@ const ApiKeysScreen: React.FC = () => {
   };
 
   const copyToClipboard = async (text: string, type: string) => {
+    if (!text) return;
     try {
       await Clipboard.setString(text);
-      Alert.alert('Copied!', `${type} copied to clipboard.`, [{ text: 'OK' }]);
+      Alert.alert('Copied!', `${type} copied to clipboard.`);
     } catch (error) {
-      Alert.alert('Error', 'Failed to copy to clipboard', [{ text: 'OK' }]);
+      Alert.alert('Error', 'Failed to copy to clipboard');
     }
   };
 
   const toggleKeyExpansion = (keyId: string) => {
     setExpandedKey(expandedKey === keyId ? null : keyId);
-  };
-
-  const maskKey = (key: string) => {
-    if (!key) return '';
-    const parts = key.split('_');
-    if (parts.length > 2) {
-      return `${parts[0]}_${parts[1]}_••••${parts[parts.length - 1].slice(-6)}`;
-    }
-    return key;
-  };
-
-  const getModeColor = (mode: 'test' | 'live') => {
-    return mode === 'live' ? '#EF4444' : '#10B981';
-  };
-
-  const getStatusColor = (isActive: boolean) => {
-    return isActive ? '#10B981' : '#6B7280';
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  // Permission Row Component with theme
-  const PermissionRow: React.FC<{
-    label: string;
-    value: boolean;
-    onToggle: () => void;
-    disabled?: boolean;
-    icon?: React.ReactNode;
-    description?: string;
-  }> = ({ label, value, onToggle, disabled, icon, description }) => {
-    return (
-      <View
-        style={[
-          styles.permissionRow,
-          { borderBottomColor: themeColors.borderLight },
-        ]}
-      >
-        <View style={styles.permissionRowLeft}>
-          {icon && (
-            <View
-              style={[
-                styles.permissionRowIcon,
-                { backgroundColor: themeColors.borderLight },
-              ]}
-            >
-              {icon}
-            </View>
-          )}
-          <View style={styles.permissionRowText}>
-            <Text
-              style={[styles.permissionRowLabel, { color: themeColors.text }]}
-            >
-              {label}
-            </Text>
-            {description && (
-              <Text
-                style={[
-                  styles.permissionRowDescription,
-                  { color: themeColors.textSecondary },
-                ]}
-              >
-                {description}
-              </Text>
-            )}
-          </View>
-        </View>
-        <View style={styles.permissionRowRight}>
-          <View
-            style={[
-              styles.permissionStatusBadge,
-              value
-                ? styles.permissionEnabledBadge
-                : styles.permissionDisabledBadge,
-            ]}
-          >
-            <Text
-              style={[
-                styles.permissionStatusText,
-                { color: value ? '#10B981' : '#6B7280' },
-              ]}
-            >
-              {value ? 'ON' : 'OFF'}
-            </Text>
-          </View>
-          <CustomToggle
-            value={value}
-            onValueChange={onToggle}
-            disabled={disabled}
-            size="large"
-          />
-        </View>
-      </View>
-    );
-  };
-
-  // Permission Card Component with theme
-  const PermissionCard: React.FC<{
-    title: string;
-    icon: React.ReactNode;
-    children: React.ReactNode;
-    color?: string;
-  }> = ({ title, icon, children, color = '#3B82F6' }) => {
-    return (
-      <View
-        style={[
-          styles.permissionCard,
-          {
-            backgroundColor: themeColors.cardBackground,
-            borderColor: themeColors.border,
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.permissionCardHeader,
-            {
-              borderBottomColor: color + '20',
-              backgroundColor: themeColors.borderLight,
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.permissionCardIcon,
-              { backgroundColor: color + '15' },
-            ]}
-          >
-            {icon}
-          </View>
-          <Text
-            style={[styles.permissionCardTitle, { color: themeColors.text }]}
-          >
-            {title}
-          </Text>
-        </View>
-        <View style={styles.permissionCardContent}>{children}</View>
-      </View>
-    );
   };
 
   const renderPermissionsData = (apiKey: ApiKey) => {
@@ -785,6 +338,7 @@ const ApiKeysScreen: React.FC = () => {
           title="Payments"
           icon={<FontAwesome5 name="credit-card" size={18} color="#3B82F6" />}
           color="#3B82F6"
+          themeColors={themeColors}
         >
           <PermissionRow
             label="Enable Payments"
@@ -794,12 +348,12 @@ const ApiKeysScreen: React.FC = () => {
                 apiKey._id,
                 'payments.enabled',
                 permissions.payments?.enabled,
-                'Payments',
               )
             }
             disabled={isToggling('payments.enabled')}
             icon={<Feather name="toggle-right" size={16} color="#3B82F6" />}
             description="Process payments with this key"
+            themeColors={themeColors}
           />
           <PermissionRow
             label="Currency Conversion"
@@ -809,7 +363,6 @@ const ApiKeysScreen: React.FC = () => {
                 apiKey._id,
                 'payments.supportsCurrencyConversion',
                 permissions.payments?.supportsCurrencyConversion,
-                'Currency Conversion',
               )
             }
             disabled={isToggling('payments.supportsCurrencyConversion')}
@@ -817,6 +370,7 @@ const ApiKeysScreen: React.FC = () => {
               <FontAwesome5 name="exchange-alt" size={14} color="#8B5CF6" />
             }
             description="Auto-convert currencies"
+            themeColors={themeColors}
           />
           <PermissionRow
             label="Payment Intents"
@@ -826,12 +380,12 @@ const ApiKeysScreen: React.FC = () => {
                 apiKey._id,
                 'payments.paymentIntents',
                 permissions.payments?.paymentIntents,
-                'Payment Intents',
               )
             }
             disabled={isToggling('payments.paymentIntents')}
             icon={<Icon name="track-changes" size={16} color="#EC4899" />}
             description="Use payment intents API"
+            themeColors={themeColors}
           />
         </PermissionCard>
 
@@ -846,79 +400,52 @@ const ApiKeysScreen: React.FC = () => {
               />
             }
             color="#8B5CF6"
+            themeColors={themeColors}
           >
             {Object.entries(permissions.paymentMethods).map(([key, value]) => {
-              const getIcon = (method: string) => {
-                switch (method) {
-                  case 'card':
-                    return (
-                      <FontAwesome5
-                        name="credit-card"
-                        size={14}
-                        color="#3B82F6"
-                      />
-                    );
-                  case 'zeptpay':
-                    return <Icon name="payments" size={16} color="#10B981" />;
-                  case 'upi':
-                    return (
-                      <MaterialCommunityIcons
-                        name="qrcode"
-                        size={16}
-                        color="#8B5CF6"
-                      />
-                    );
-                  case 'netBanking':
-                    return (
-                      <FontAwesome5
-                        name="university"
-                        size={14}
-                        color="#EC4899"
-                      />
-                    );
-                  case 'wallet':
-                    return (
-                      <MaterialCommunityIcons
-                        name="wallet"
-                        size={16}
-                        color="#F59E0B"
-                      />
-                    );
-                  case 'autopay':
-                    return <Icon name="autorenew" size={16} color="#6366F1" />;
-                  case 'banktransfer':
-                    return (
-                      <FontAwesome5
-                        name="exchange-alt"
-                        size={14}
-                        color="#14B8A6"
-                      />
-                    );
-                  case 'qrpayment':
-                    return (
-                      <MaterialCommunityIcons
-                        name="qrcode-scan"
-                        size={16}
-                        color="#F97316"
-                      />
-                    );
-                  default:
-                    return <Feather name="circle" size={14} color="#6B7280" />;
-                }
-              };
-
-              const getDescription = (method: string) => {
-                const descriptions: Record<string, string> = {
-                  card: 'Credit/Debit card payments',
-                  zeptpay: 'AirX Pay wallet',
-                  upi: 'UPI payments',
-                  netBanking: 'Net banking',
-                  wallet: 'Digital wallet',
-                  autopay: 'Recurring payments',
-                  banktransfer: 'Bank transfers',
-                  qrpayment: 'QR code payments',
-                };
-                return descriptions[method] || `${method} payments`;
+              const getIcon = () => {
+                const iconName = getPaymentMethodIcon(key);
+                if (key === 'card')
+                  return (
+                    <FontAwesome5 name={iconName} size={14} color="#3B82F6" />
+                  );
+                if (key === 'zeptpay')
+                  return <Icon name={iconName} size={16} color="#10B981" />;
+                if (key === 'upi')
+                  return (
+                    <MaterialCommunityIcons
+                      name={iconName}
+                      size={16}
+                      color="#8B5CF6"
+                    />
+                  );
+                if (key === 'netBanking')
+                  return (
+                    <FontAwesome5 name={iconName} size={14} color="#EC4899" />
+                  );
+                if (key === 'wallet')
+                  return (
+                    <MaterialCommunityIcons
+                      name={iconName}
+                      size={16}
+                      color="#F59E0B"
+                    />
+                  );
+                if (key === 'autopay')
+                  return <Icon name={iconName} size={16} color="#6366F1" />;
+                if (key === 'banktransfer')
+                  return (
+                    <FontAwesome5 name={iconName} size={14} color="#14B8A6" />
+                  );
+                if (key === 'qrpayment')
+                  return (
+                    <MaterialCommunityIcons
+                      name={iconName}
+                      size={16}
+                      color="#F97316"
+                    />
+                  );
+                return <Feather name="circle" size={14} color="#6B7280" />;
               };
 
               return (
@@ -933,12 +460,12 @@ const ApiKeysScreen: React.FC = () => {
                       apiKey._id,
                       `paymentMethods.${key}.enabled`,
                       value.enabled,
-                      key,
                     )
                   }
                   disabled={isToggling(`paymentMethods.${key}.enabled`)}
-                  icon={getIcon(key)}
-                  description={getDescription(key)}
+                  icon={getIcon()}
+                  description={getPaymentMethodDescription(key)}
+                  themeColors={themeColors}
                 />
               );
             })}
@@ -949,6 +476,7 @@ const ApiKeysScreen: React.FC = () => {
           title="Additional Features"
           icon={<Ionicons name="options" size={20} color="#EC4899" />}
           color="#EC4899"
+          themeColors={themeColors}
         >
           {permissions.customers && (
             <PermissionRow
@@ -959,12 +487,12 @@ const ApiKeysScreen: React.FC = () => {
                   apiKey._id,
                   'customers.enabled',
                   permissions.customers.enabled,
-                  'Customers',
                 )
               }
               disabled={isToggling('customers.enabled')}
               icon={<Icon name="people" size={16} color="#EC4899" />}
               description="Manage customers"
+              themeColors={themeColors}
             />
           )}
           {permissions.refunds && (
@@ -976,12 +504,12 @@ const ApiKeysScreen: React.FC = () => {
                   apiKey._id,
                   'refunds.enabled',
                   permissions.refunds.enabled,
-                  'Refunds',
                 )
               }
               disabled={isToggling('refunds.enabled')}
               icon={<Icon name="refresh" size={16} color="#F59E0B" />}
               description="Process refunds"
+              themeColors={themeColors}
             />
           )}
           {permissions.webhooks && (
@@ -993,12 +521,12 @@ const ApiKeysScreen: React.FC = () => {
                   apiKey._id,
                   'webhooks.enabled',
                   permissions.webhooks.enabled,
-                  'Webhooks',
                 )
               }
               disabled={isToggling('webhooks.enabled')}
               icon={<Icon name="webhook" size={16} color="#8B5CF6" />}
               description="Receive webhook events"
+              themeColors={themeColors}
             />
           )}
           {permissions.payouts && (
@@ -1010,7 +538,6 @@ const ApiKeysScreen: React.FC = () => {
                   apiKey._id,
                   'payouts.enabled',
                   permissions.payouts.enabled,
-                  'Payouts',
                 )
               }
               disabled={isToggling('payouts.enabled')}
@@ -1022,6 +549,7 @@ const ApiKeysScreen: React.FC = () => {
                 />
               }
               description="Process payouts to bank accounts"
+              themeColors={themeColors}
             />
           )}
           {permissions.transfers && (
@@ -1033,12 +561,12 @@ const ApiKeysScreen: React.FC = () => {
                   apiKey._id,
                   'transfers.enabled',
                   permissions.transfers.enabled,
-                  'Transfers',
                 )
               }
               disabled={isToggling('transfers.enabled')}
               icon={<Icon name="swap-horiz" size={16} color="#F59E0B" />}
               description="Transfer funds between accounts"
+              themeColors={themeColors}
             />
           )}
           {permissions.connect && (
@@ -1050,12 +578,12 @@ const ApiKeysScreen: React.FC = () => {
                   apiKey._id,
                   'connect.enabled',
                   permissions.connect.enabled,
-                  'Connect',
                 )
               }
               disabled={isToggling('connect.enabled')}
-              icon={<Icon name="link" size={16} color="#cc00ff" />}
+              icon={<Icon name="link" size={16} color="#CC00FF" />}
               description="Connect with third-party services"
+              themeColors={themeColors}
             />
           )}
           {permissions.subscriptions && (
@@ -1067,12 +595,12 @@ const ApiKeysScreen: React.FC = () => {
                   apiKey._id,
                   'subscriptions.enabled',
                   permissions.subscriptions.enabled,
-                  'Subscriptions',
                 )
               }
               disabled={isToggling('subscriptions.enabled')}
               icon={<Icon name="subscriptions" size={16} color="#10B981" />}
               description="Manage subscriptions"
+              themeColors={themeColors}
             />
           )}
         </PermissionCard>
@@ -1085,11 +613,6 @@ const ApiKeysScreen: React.FC = () => {
     const modeColor = getModeColor(apiKey.mode);
     const statusColor = getStatusColor(apiKey.isActive);
     const isToggling = togglingKeyId === apiKey._id;
-
-    const otherActiveKeys =
-      apiKeysData?.keys.filter(
-        k => k._id !== apiKey._id && k.mode === apiKey.mode && k.isActive,
-      ) || [];
 
     return (
       <View
@@ -1268,7 +791,7 @@ const ApiKeysScreen: React.FC = () => {
                 >
                   {apiKey.publicKey || 'Not available'}
                 </Text>
-                {apiKey.publicKey && (
+                {isKeyAvailable(apiKey.publicKey) && (
                   <TouchableOpacity
                     style={[styles.copyButton, { backgroundColor: '#EFF6FF' }]}
                     onPress={() =>
@@ -1312,7 +835,7 @@ const ApiKeysScreen: React.FC = () => {
                 >
                   {apiKey.secretKey || 'Not available'}
                 </Text>
-                {apiKey.secretKey && (
+                {isKeyAvailable(apiKey.secretKey) && (
                   <TouchableOpacity
                     style={[styles.copyButton, { backgroundColor: '#EFF6FF' }]}
                     onPress={() =>
@@ -1372,26 +895,6 @@ const ApiKeysScreen: React.FC = () => {
                       ? 'This key can process API requests'
                       : 'This key cannot process API requests'}
                   </Text>
-
-                  {!apiKey.isActive && otherActiveKeys.length > 0 && (
-                    <View
-                      style={[
-                        styles.activationWarning,
-                        { backgroundColor: '#FFFBEB' },
-                      ]}
-                    >
-                      <Icon name="warning" size={16} color="#F59E0B" />
-                      <Text
-                        style={[
-                          styles.activationWarningText,
-                          { color: '#92400E' },
-                        ]}
-                      >
-                        Activating will disable {otherActiveKeys.length} other{' '}
-                        {apiKey.mode} key(s)
-                      </Text>
-                    </View>
-                  )}
                 </View>
 
                 <View style={styles.keyActivationRight}>
@@ -1406,6 +909,7 @@ const ApiKeysScreen: React.FC = () => {
                             apiKey._id,
                             apiKey.isActive,
                             apiKey.keyName,
+                            apiKey.mode,
                           )
                         }
                         disabled={isToggling}
@@ -1550,6 +1054,10 @@ const ApiKeysScreen: React.FC = () => {
       </SafeAreaView>
     );
   }
+
+  const stats = apiKeysData
+    ? getApiKeyStats(apiKeysData.keys, apiKeysData.user.isLive)
+    : { total: 0, active: 0, modeKeys: 0 };
 
   return (
     <SafeAreaProvider>
@@ -1718,7 +1226,7 @@ const ApiKeysScreen: React.FC = () => {
             >
               <View style={styles.statItem}>
                 <Text style={[styles.statNumber, { color: themeColors.text }]}>
-                  {apiKeysData.keys.length}
+                  {stats.total}
                 </Text>
                 <Text
                   style={[
@@ -1737,7 +1245,7 @@ const ApiKeysScreen: React.FC = () => {
               />
               <View style={styles.statItem}>
                 <Text style={[styles.statNumber, { color: themeColors.text }]}>
-                  {apiKeysData.keys.filter(k => k.isActive).length}
+                  {stats.active}
                 </Text>
                 <Text
                   style={[
@@ -1756,12 +1264,7 @@ const ApiKeysScreen: React.FC = () => {
               />
               <View style={styles.statItem}>
                 <Text style={[styles.statNumber, { color: themeColors.text }]}>
-                  {
-                    apiKeysData.keys.filter(
-                      k =>
-                        k.mode === (apiKeysData.user.isLive ? 'live' : 'test'),
-                    ).length
-                  }
+                  {stats.modeKeys}
                 </Text>
                 <Text
                   style={[
@@ -1838,7 +1341,7 @@ const ApiKeysScreen: React.FC = () => {
   );
 };
 
-// Styles remain with dynamic colors handled inline
+// Styles (keep all the styles from original)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -2243,18 +1746,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  toggleTrack: {
-    position: 'relative',
-  },
-  toggleThumb: {
-    position: 'absolute',
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
-  },
   permissionsContainer: {
     gap: 16,
   },
@@ -2317,89 +1808,6 @@ const styles = StyleSheet.create({
     fontWeight: '200',
     fontSize: 10,
   },
-  permissionCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  permissionCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  permissionCardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  permissionCardTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  permissionCardContent: {
-    padding: 12,
-  },
-  permissionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-  },
-  permissionRowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  permissionRowIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  permissionRowText: {
-    flex: 1,
-  },
-  permissionRowLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  permissionRowDescription: {
-    fontSize: 11,
-  },
-  permissionRowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  permissionStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  permissionEnabledBadge: {
-    backgroundColor: '#D1FAE5',
-  },
-  permissionDisabledBadge: {
-    backgroundColor: '#F3F4F6',
-  },
-  permissionStatusText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
   keyActivationSection: {
     borderRadius: 16,
     padding: 16,
@@ -2436,17 +1844,6 @@ const styles = StyleSheet.create({
   keyActivationDescription: {
     fontSize: 12,
     marginBottom: 8,
-  },
-  activationWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    padding: 8,
-    borderRadius: 8,
-  },
-  activationWarningText: {
-    fontSize: 11,
-    flex: 1,
   },
   keyActivationRight: {
     flexDirection: 'row',

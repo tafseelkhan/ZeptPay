@@ -28,6 +28,13 @@ export const API_ENDPOINTS = {
   WEBHOOK_CREATE: '/api/webhook/core/create',
   WEBHOOK_UPDATE: '/api/webhook/core/update',
   WEBHOOK_STATUS: '/api/webhook/core/status',
+
+  // Developer API Keys endpoints
+  API_KEYS_USER: '/api/test-live/api-keys/user',
+  API_KEY_TOGGLE: (apiKeyId: string) =>
+    `/api/test-live/api-keys/${apiKeyId}/toggle`,
+  API_KEY_PERMISSION_TOGGLE: (apiKeyId: string) =>
+    `/api/test-live/api-keys/${apiKeyId}/permissions`,
 };
 
 /**
