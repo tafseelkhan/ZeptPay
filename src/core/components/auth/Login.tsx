@@ -1,3 +1,4 @@
+// screens/auth/LoginScreen.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -16,7 +17,6 @@ import {
   Image,
   StatusBar,
 } from 'react-native';
-import axios, { AxiosError } from 'axios';
 import CountryPicker from 'react-native-country-picker-modal';
 import type {
   Country,
@@ -26,8 +26,21 @@ import type {
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/Ionicons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../contexts/theme/ThemeContext';
+
+// Import separated code
+import {
+  formatPhoneForAPI,
+  formatPhoneForDisplay,
+  validateOTP,
+  getPhoneValidationError,
+} from '../../utils/auth/loginPhoneUtils';
+import {
+  handleLogin,
+  handleVerifyOTPLogin,
+  handleResendOTPLogin,
+  handleApiError,
+} from '../../services/auth/loginAuthService';
 
 // Types
 type AuthMode = 'login' | 'verify';
@@ -43,23 +56,6 @@ interface LoginData {
 
 interface VerifyOTPData {
   otp: string[];
-}
-
-interface LoginResponse {
-  message: string;
-}
-
-interface VerifyOTPResponse {
-  message: string;
-  token: string;
-  user: {
-    _id: string;
-    name: string;
-    phone: string;
-    country: string;
-    isDeveloper: boolean;
-    balance: number;
-  };
 }
 
 interface SimpleCountry {
@@ -85,31 +81,9 @@ export type RootStackParamList = {
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
-const API_BASE_URL = 'http://172.20.10.12:7000/api';
 const APP_NAME = 'ZeptPay';
 
-// ✅ Phone Formatter - NO SPACE (matches backend storage)
-const formatPhoneForAPI = (
-  callingCode: string,
-  phoneNumber: string,
-): string => {
-  const cleanedNumber = phoneNumber.replace(/\D/g, '');
-  const code = callingCode.replace('+', '');
-  // Send WITHOUT space: +919983141558
-  return `+${code}${cleanedNumber}`;
-};
-
-// ✅ Format phone for display (WITH space)
-const formatPhoneForDisplay = (
-  callingCode: string,
-  phoneNumber: string,
-): string => {
-  const cleanedNumber = phoneNumber.replace(/\D/g, '');
-  const code = callingCode.replace('+', '');
-  return `+${code} ${cleanedNumber}`;
-};
-
-// App Logo Component with theme
+// App Logo Component
 const AppLogo: React.FC<{ isDark: boolean }> = ({ isDark }) => (
   <View style={styles.logoContainer}>
     <Image
@@ -124,7 +98,7 @@ const AppLogo: React.FC<{ isDark: boolean }> = ({ isDark }) => (
   </View>
 );
 
-// Signup Link Component with theme
+// Signup Link Component
 const SignupLink: React.FC<{ onPress: () => void; isDark: boolean }> = ({
   onPress,
   isDark,
@@ -139,7 +113,7 @@ const SignupLink: React.FC<{ onPress: () => void; isDark: boolean }> = ({
   </View>
 );
 
-// OTP Input Component with theme
+// OTP Input Component
 const OtpInput: React.FC<{
   value: string[];
   onChange: (otp: string[]) => void;
@@ -224,18 +198,6 @@ const OtpInput: React.FC<{
   );
 };
 
-const saveAuthData = async (token: string, userData: any): Promise<void> => {
-  try {
-    await AsyncStorage.setItem('authToken', token);
-    await AsyncStorage.setItem('userData', JSON.stringify(userData));
-    await AsyncStorage.setItem('userId', userData._id);
-    console.log('✅ Auth data saved successfully');
-  } catch (error) {
-    console.error('❌ Error saving auth data:', error);
-    throw error;
-  }
-};
-
 const LoginScreen: React.FC = () => {
   const { isDark } = useTheme();
   const navigation = useNavigation<NavigationProp>();
@@ -274,7 +236,7 @@ const LoginScreen: React.FC = () => {
     }
   }, [authMode, timer]);
 
-  // Update display with space, but store without space for API
+  // Update phone display
   useEffect(() => {
     if (loginData.phone) {
       const displayPhone = formatPhoneForDisplay(
@@ -294,18 +256,18 @@ const LoginScreen: React.FC = () => {
   }, [loginData.phone, country]);
 
   const validatePhoneForm = (): boolean => {
-    const newErrors: FormErrors = {};
+    const error = getPhoneValidationError(
+      loginData.phone,
+      country.callingCode[0],
+    );
 
-    if (!loginData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!/^\d{10,}$/.test(loginData.phone.replace(/\D/g, ''))) {
-      newErrors.phone = `Enter valid ${
-        country.callingCode[0] === '91' ? '10' : 'valid'
-      } digit phone number`;
+    if (error) {
+      setErrors({ phone: error });
+      return false;
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors({});
+    return true;
   };
 
   const handleSelectCountry = (selectedCountry: Country) => {
@@ -327,13 +289,12 @@ const LoginScreen: React.FC = () => {
     setShowCountryPicker(false);
   };
 
-  // ✅ LOGIN - Send phone WITHOUT space
-  const handleLogin = async (): Promise<void> => {
+  // ✅ LOGIN Handler
+  const handleLoginSubmit = async (): Promise<void> => {
     if (!validatePhoneForm()) return;
 
     setLoading(true);
     try {
-      // Format WITHOUT space: +919983141558
       const formattedPhone = formatPhoneForAPI(
         country.callingCode[0],
         loginData.phone.trim(),
@@ -341,102 +302,80 @@ const LoginScreen: React.FC = () => {
 
       setPhoneForResend(formattedPhone);
 
-      const payload = { phone: formattedPhone };
-      console.log('📞 Sending login payload:', payload);
+      const result = await handleLogin({ phone: formattedPhone });
 
-      const response = await axios.post<LoginResponse>(
-        `${API_BASE_URL}/auth/login`,
-        payload,
-      );
-
-      setAuthMode('verify');
-      setTimer(60);
-      setErrors(prev => ({ ...prev, otp: undefined }));
-      Alert.alert('Success', 'OTP sent successfully to your phone');
-    } catch (error) {
-      const axiosError = error as AxiosError<{ message: string }>;
-      console.error(
-        'Login error:',
-        axiosError.response?.data || axiosError.message,
-      );
-
-      if (axiosError.response?.data?.message?.includes('not found')) {
+      if (result.success) {
+        setAuthMode('verify');
+        setTimer(60);
+        setErrors(prev => ({ ...prev, otp: undefined }));
+        Alert.alert('Success', 'OTP sent successfully to your phone');
+      } else if (result.error === 'USER_NOT_FOUND') {
         Alert.alert('User Not Found', 'Please sign up first', [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Sign Up', onPress: () => navigation.navigate('SignUp') },
         ]);
       } else {
-        handleApiError(axiosError, 'Login failed');
+        Alert.alert('Error', result.error || 'Login failed');
       }
+    } catch (error) {
+      const errorMessage = handleApiError(error, 'Login failed');
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ VERIFY OTP - Send phone WITHOUT space
-  const handleVerifyOTP = async (): Promise<void> => {
+  // ✅ VERIFY OTP Handler
+  const handleVerifyOTPSubmit = async (): Promise<void> => {
     const otpString = verifyData.otp.join('');
-    if (otpString.length !== 6) {
+
+    if (!validateOTP(verifyData.otp)) {
       setErrors({ otp: 'Please enter 6-digit OTP' });
       return;
     }
 
     setLoading(true);
     try {
-      const payload = { phone: phoneForResend, otp: otpString };
-      console.log('🔐 Verifying OTP for phone:', phoneForResend);
+      const result = await handleVerifyOTPLogin(phoneForResend, otpString);
 
-      const response = await axios.post<VerifyOTPResponse>(
-        `${API_BASE_URL}/auth/verify-otp-login`,
-        payload,
-      );
-
-      await saveAuthData(response.data.token, response.data.user);
-
-      if (response.data.user.isDeveloper) {
-        navigation.navigate('DeveloperHome');
+      if (result.success) {
+        if (result.data?.user.isDeveloper) {
+          navigation.navigate('DeveloperHome');
+        } else {
+          navigation.navigate('UserHome');
+        }
+        resetForms();
       } else {
-        navigation.navigate('UserHome');
+        Alert.alert('Error', result.error || 'OTP verification failed');
+        setVerifyData({ otp: ['', '', '', '', '', ''] });
       }
-
-      resetForms();
     } catch (error) {
-      const axiosError = error as AxiosError<{ message: string }>;
-      handleApiError(axiosError, 'OTP verification failed');
+      const errorMessage = handleApiError(error, 'OTP verification failed');
+      Alert.alert('Error', errorMessage);
       setVerifyData({ otp: ['', '', '', '', '', ''] });
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ RESEND OTP - Send phone WITHOUT space
-  const handleResendOTP = async (): Promise<void> => {
+  // ✅ RESEND OTP Handler
+  const handleResendOTPSubmit = async (): Promise<void> => {
     if (timer > 0) return;
 
     setResendLoading(true);
     try {
-      const payload = { phone: phoneForResend };
-      console.log('📞 Resending OTP for phone:', phoneForResend);
+      const result = await handleResendOTPLogin(phoneForResend);
 
-      await axios.post(`${API_BASE_URL}/auth/resend-otp-login`, payload);
-
-      setTimer(60);
-      setVerifyData({ otp: ['', '', '', '', '', ''] });
-      setErrors(prev => ({ ...prev, otp: undefined }));
-      Alert.alert('Success', 'OTP resent successfully');
-    } catch (error) {
-      const axiosError = error as AxiosError<{ message: string }>;
-      console.error(
-        'Resend OTP error:',
-        axiosError.response?.data || axiosError.message,
-      );
-
-      let errorMessage = 'Failed to resend OTP';
-      if (axiosError.response?.data?.message) {
-        errorMessage = axiosError.response.data.message;
-      } else if (axiosError.message.includes('Network Error')) {
-        errorMessage = 'Network error. Please check your connection.';
+      if (result.success) {
+        setTimer(60);
+        setVerifyData({ otp: ['', '', '', '', '', ''] });
+        setErrors(prev => ({ ...prev, otp: undefined }));
+        Alert.alert('Success', 'OTP resent successfully');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to resend OTP');
       }
+    } catch (error) {
+      const errorMessage = handleApiError(error, 'Failed to resend OTP');
       Alert.alert('Error', errorMessage);
     } finally {
       setResendLoading(false);
@@ -445,25 +384,6 @@ const LoginScreen: React.FC = () => {
 
   const navigateToSignup = () => {
     navigation.navigate('SignUp');
-  };
-
-  const handleApiError = (
-    error: AxiosError<{ message: string }>,
-    defaultMessage: string,
-  ): void => {
-    console.error('API Error:', error.response?.data || error.message);
-
-    let errorMessage = defaultMessage;
-
-    if (error.response?.data?.message) {
-      errorMessage = error.response.data.message;
-    } else if (error.message.includes('Network Error')) {
-      errorMessage = 'Network error. Please check your connection.';
-    } else if (error.message.includes('timeout')) {
-      errorMessage = 'Request timeout. Please try again.';
-    }
-
-    Alert.alert('Error', errorMessage);
   };
 
   const resetForms = (): void => {
@@ -496,7 +416,7 @@ const LoginScreen: React.FC = () => {
   };
 
   const handleOtpComplete = (otp: string) => {
-    handleVerifyOTP();
+    handleVerifyOTPSubmit();
   };
 
   const renderPhoneForm = (): React.ReactNode => (
@@ -552,7 +472,7 @@ const LoginScreen: React.FC = () => {
             maxLength={15}
             editable={!loading}
             returnKeyType="done"
-            onSubmitEditing={handleLogin}
+            onSubmitEditing={handleLoginSubmit}
           />
         </View>
         {loginData.phone ? (
@@ -567,7 +487,7 @@ const LoginScreen: React.FC = () => {
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleLogin}
+        onPress={handleLoginSubmit}
         disabled={loading}
       >
         {loading ? (
@@ -617,7 +537,7 @@ const LoginScreen: React.FC = () => {
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleVerifyOTP}
+        onPress={handleVerifyOTPSubmit}
         disabled={loading}
       >
         {loading ? (
@@ -647,7 +567,7 @@ const LoginScreen: React.FC = () => {
           Didn't receive code?
         </Text>
         <TouchableOpacity
-          onPress={handleResendOTP}
+          onPress={handleResendOTPSubmit}
           disabled={timer > 0 || resendLoading}
         >
           {resendLoading ? (

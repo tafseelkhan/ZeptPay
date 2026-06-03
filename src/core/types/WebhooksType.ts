@@ -1,14 +1,34 @@
-// types/onboarding.types.ts
-export interface WebhookStatusResponse {
-  success: boolean;
-  enabled: boolean;
+// types/webhook.types.ts
+export interface WebhookEvent {
+  _id: string;
+  category: string;
+  category_display?: string;
+  events: {
+    name: string;
+    title?: string;
+    description: string;
+  }[];
 }
 
-export type OnboardingStep = 1 | 2 | 3 | 4;
+export interface WebhookData {
+  _id: string;
+  developerUserId: string;
+  url: string;
+  localUrl?: string;
+  webhook: string;
+  events: WebhookEvent[];
+  mode?: 'test' | 'live';
+  label?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
-export interface StepProps {
-  onNext: () => void;
-  currentStep: OnboardingStep;
-  totalSteps: number;
-  isTransitioning?: boolean;
+export interface UserInfo {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  isDeveloper: boolean;
+  isLive: boolean;
 }

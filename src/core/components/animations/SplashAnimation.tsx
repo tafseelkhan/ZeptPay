@@ -6,18 +6,16 @@ import {
   StyleSheet,
   Dimensions,
   TouchableWithoutFeedback,
-  Platform,
   Animated,
-  Easing,
-  PermissionsAndroid,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LottieView from 'lottie-react-native';
-import Sound from 'react-native-sound';
 import { useTheme } from '../../contexts/theme/ThemeContext';
-import { verifyToken } from '../../services/SplashScreen';
+import { SoundService } from '../../services/animations/soundService';
+import { AuthService } from '../../services/animations/authService';
+import { animationUtils } from '../../utils/animations/animationUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -34,10 +32,8 @@ type NavigationProp = StackNavigationProp<RootStackParamList>;
 export default function ZeptPay() {
   const { isDark } = useTheme();
   const navigation = useNavigation<NavigationProp>();
-  const soundRef = useRef<Sound | null>(null);
+  const soundService = useRef(SoundService.getInstance());
   const [isPressed, setIsPressed] = useState(false);
-  const [soundLoaded, setSoundLoaded] = useState(false);
-  const [soundError, setSoundError] = useState<string | null>(null);
 
   // Animation values
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -50,267 +46,84 @@ export default function ZeptPay() {
   const primaryColor = isDark ? '#34D399' : '#10B981';
   const subtitleColor = isDark ? '#94A3B8' : '#6b7280';
 
-  console.log('=========================================');
-  console.log('ZeptPay Component Mounted');
-  console.log('Platform:', Platform.OS);
-  console.log('=========================================');
-
-  // Request Android permission for audio
-  const requestAndroidPermission = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-          {
-            title: 'Storage Permission',
-            message: 'App needs access to storage to play sounds',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          },
-        );
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          console.log('✅ Storage permission granted');
-          return true;
-        } else {
-          console.log('❌ Storage permission denied');
-          return false;
-        }
-      } catch (err) {
-        console.warn(err);
-        return false;
-      }
-    }
-    return true;
-  };
-
-  // Load sound with react-native-sound
+  // Load sound on mount
   useEffect(() => {
-    let mounted = true;
-
     const loadSound = async () => {
-      try {
-        console.log('🔊 INITIALIZING REACT-NATIVE-SOUND...');
-
-        // Request permission for Android
-        const hasPermission = await requestAndroidPermission();
-        if (!hasPermission && Platform.OS === 'android') {
-          console.log('⚠️ Permission not granted, sound may not work');
-        }
-
-        // Set category for iOS
-        if (Platform.OS === 'ios') {
-          console.log('🍎 Setting iOS category...');
-          Sound.setCategory('Playback', true);
-          console.log('✅ iOS category set');
-        }
-
-        console.log('📁 Loading sound file: splash_sound.mp3');
-
-        // Enable playback in silence mode (for iOS)
-        Sound.setActive(true);
-
-        const sound = new Sound(
-          require('../../../assets/sounds/splash_sound.mp3'),
-          error => {
-            if (error) {
-              console.log('❌❌❌ SOUND LOAD FAILED ❌❌❌');
-              console.log('Error code:', error.code);
-              console.log('Error message:', error.message);
-              console.log('Full error:', error);
-              setSoundError(`Load failed: ${error.message}`);
-              setSoundLoaded(false);
-              return;
-            }
-
-            console.log('✅✅✅ SOUND LOADED SUCCESSFULLY ✅✅✅');
-            console.log('Sound duration:', sound.getDuration());
-            console.log('Number of channels:', sound.getNumberOfChannels());
-            console.log('Volume:', sound.getVolume());
-            console.log('Is loaded:', sound.isLoaded());
-
-            soundRef.current = sound;
-            setSoundLoaded(true);
-            setSoundError(null);
-          },
-        );
-
-        console.log('🎵 Sound object created');
-      } catch (error: any) {
-        console.log('🔥 Audio setup crashed:', error);
-        console.log('Error:', error.message);
-        setSoundError(`Setup error: ${error.message}`);
-      }
+      await soundService.current.loadSound(
+        require('../../../assets/sounds/splash_sound.mp3'),
+      );
     };
 
     loadSound();
 
     return () => {
-      console.log('🧹 Cleaning up: releasing sound');
-      if (soundRef.current) {
-        soundRef.current.release();
-        console.log('✅ Sound released');
-      }
+      soundService.current.releaseSound();
     };
   }, []);
 
   const playSound = () => {
-    console.log('🎯 playSound() called');
-    console.log('Sound ref exists:', !!soundRef.current);
-    console.log('Sound loaded state:', soundLoaded);
-    console.log('Sound error:', soundError);
-
-    if (!soundRef.current) {
-      console.log('❌ No sound reference - sound not loaded');
-      console.log('Sound error details:', soundError);
-      return;
-    }
-
-    if (!soundLoaded) {
-      console.log('❌ Sound not loaded yet, waiting...');
-      return;
-    }
-
-    try {
-      console.log('🔄 Resetting to start (setCurrentTime 0)');
-      soundRef.current.setCurrentTime(0);
-
-      console.log('▶️ Calling play()');
-      soundRef.current.play(success => {
-        if (success) {
-          console.log('✅✅✅ SOUND PLAYED SUCCESSFULLY! ✅✅✅');
-        } else {
-          console.log('❌❌❌ SOUND PLAYBACK FAILED ❌❌❌');
-          console.log('Playback failed - no specific error provided');
-        }
-      });
-      console.log('✅ Play command sent');
-    } catch (error: any) {
-      console.log('💥 Exception in playSound:', error);
-      console.log('Error:', error.message);
-      setSoundError(`Playback exception: ${error.message}`);
-    }
+    soundService.current.playSound();
   };
 
   const handleTap = () => {
-    console.log('=========================================');
-    console.log('👆👆👆 TAP DETECTED! 👆👆👆');
-    console.log('=========================================');
     playSound();
     setIsPressed(true);
     setTimeout(() => {
-      console.log('Reset press state');
       setIsPressed(false);
     }, 200);
   };
 
   // Start animations on mount
   useEffect(() => {
-    console.log('🎬 Starting animations...');
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      }),
-      Animated.spring(logoScaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(lottieAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      console.log('✅ Animations finished');
-    });
+    animationUtils
+      .parallelAnimations([
+        animationUtils.fadeIn(fadeAnim, 1000),
+        animationUtils.scaleSpring(logoScaleAnim, 1),
+        Animated.timing(lottieAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+      .start();
   }, []);
 
   // Handle press animation
   useEffect(() => {
-    console.log('🖱️ Press state changed:', isPressed);
-    Animated.spring(scaleAnim, {
-      toValue: isPressed ? 0.98 : 1,
-      friction: 3,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
+    animationUtils.scalePress(scaleAnim, isPressed);
   }, [isPressed]);
 
-  // ✅ FIXED: Auth check - Token se check karega developer hai ya normal user
+  // Auth check
   useEffect(() => {
-    console.log('🔐 Setting up auth check...');
-
     let isMounted = true;
 
     const checkAuthAndNavigate = async () => {
       try {
-        console.log('🔍 Checking auth token...');
-        const token = await AsyncStorage.getItem('authToken');
-        console.log('Token present:', !!token);
+        const token = await AuthService.getToken();
 
         if (!token) {
-          console.log('🚀 No token, navigating to SignUp');
           if (isMounted) navigation.navigate('SignUp');
           return;
         }
 
-        console.log('🔄 Verifying token with server...');
-        const result = await verifyToken(token);
-        console.log('Token verification result:', result);
+        const result = await AuthService.verifyAndGetUserType();
 
-        // result should contain { success: boolean, user?: { isDeveloper: boolean } }
-        if (result && result.success) {
-          console.log('✅ Token valid');
-
-          // Check if user data is available
-          const userDataString = await AsyncStorage.getItem('userData');
-          let isDeveloper = false;
-
-          if (userDataString) {
-            const userData = JSON.parse(userDataString);
-            isDeveloper = userData.isDeveloper === true;
-            console.log(
-              '👤 User type from storage:',
-              isDeveloper ? 'Developer' : 'Normal User',
-            );
-          } else if (result.user) {
-            isDeveloper = result.user.isDeveloper === true;
-            console.log(
-              '👤 User type from response:',
-              isDeveloper ? 'Developer' : 'Normal User',
-            );
-            // Save user data if not already saved
-            await AsyncStorage.setItem('userData', JSON.stringify(result.user));
-          }
-
-          // Navigate based on user type
-          if (isDeveloper) {
-            console.log('🚀 Navigating to DeveloperHome');
+        if (result.isValid) {
+          if (result.isDeveloper) {
             if (isMounted) navigation.navigate('DeveloperHome');
           } else {
-            console.log('🚀 Navigating to UserHome');
             if (isMounted) navigation.navigate('UserHome');
           }
         } else {
-          console.log('❌ Token invalid, removing and navigating to SignUp');
-          await AsyncStorage.removeItem('authToken');
-          await AsyncStorage.removeItem('userData');
+          await AuthService.clearAuthData();
           if (isMounted) navigation.navigate('SignUp');
         }
       } catch (error) {
-        console.error('❌ Auth error:', error);
         if (isMounted) navigation.navigate('SignUp');
       }
     };
 
-    // Wait for minimum 3 seconds for splash screen
     const timeoutId = setTimeout(() => {
-      console.log('⏰ Min time elapsed, checking auth...');
       checkAuthAndNavigate();
     }, 3000);
 

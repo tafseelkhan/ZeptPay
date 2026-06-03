@@ -1,3 +1,4 @@
+// screens/auth/AuthScreen.tsx (Updated version)
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -17,7 +18,6 @@ import {
   StatusBar,
   Animated,
 } from 'react-native';
-import axios, { AxiosError } from 'axios';
 import CountryPicker from 'react-native-country-picker-modal';
 import type {
   Country,
@@ -27,8 +27,21 @@ import type {
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/Ionicons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../contexts/theme/ThemeContext';
+
+// Import separated code
+import {
+  formatPhoneForAPI,
+  formatPhoneForDisplay,
+  validatePhoneNumber,
+  validateOTP,
+} from '../../utils/auth/signupPhoneUtils';
+import {
+  handleSignup,
+  handleVerifyOTP,
+  handleResendOTP,
+  handleApiError,
+} from '../../services/auth/signupAuthService';
 
 // Types
 type AuthMode = 'signup' | 'verify';
@@ -50,25 +63,6 @@ interface SignupData {
 
 interface VerifyOTPData {
   otp: string[];
-}
-
-interface SignupResponse {
-  message: string;
-  otp?: string;
-}
-
-interface VerifyOTPResponse {
-  message: string;
-  token: string;
-  user: {
-    id: string;
-    name: string;
-    phone: string;
-    country: string;
-    isDeveloper: boolean;
-    balance: number;
-    isLive: boolean;
-  };
 }
 
 interface SimpleCountry {
@@ -94,29 +88,7 @@ export type RootStackParamList = {
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
-const API_BASE_URL = 'http://172.20.10.12:7000/api';
 const APP_NAME = 'ZeptPay';
-
-// ✅ Phone Formatter - NO SPACE (matches backend storage)
-const formatPhoneForAPI = (
-  callingCode: string,
-  phoneNumber: string,
-): string => {
-  const cleanedNumber = phoneNumber.replace(/\D/g, '');
-  const code = callingCode.replace('+', '');
-  // Send WITHOUT space: +919983141558
-  return `+${code}${cleanedNumber}`;
-};
-
-// ✅ Format phone for display (WITH space)
-const formatPhoneForDisplay = (
-  callingCode: string,
-  phoneNumber: string,
-): string => {
-  const cleanedNumber = phoneNumber.replace(/\D/g, '');
-  const code = callingCode.replace('+', '');
-  return `+${code} ${cleanedNumber}`;
-};
 
 // App Logo Component with theme
 const AppLogo: React.FC<{ isDark: boolean }> = ({ isDark }) => (
@@ -283,18 +255,6 @@ const OtpInput: React.FC<{
   );
 };
 
-const saveAuthData = async (token: string, userData: any): Promise<void> => {
-  try {
-    await AsyncStorage.setItem('authToken', token);
-    await AsyncStorage.setItem('userData', JSON.stringify(userData));
-    await AsyncStorage.setItem('userId', userData.id || userData._id);
-    console.log('✅ Auth data saved successfully');
-  } catch (error) {
-    console.error('❌ Error saving auth data:', error);
-    throw error;
-  }
-};
-
 const AuthScreen: React.FC = () => {
   const { isDark } = useTheme();
   const navigation = useNavigation<NavigationProp>();
@@ -368,7 +328,7 @@ const AuthScreen: React.FC = () => {
 
     if (!signupData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
-    } else if (!/^\d{10,}$/.test(signupData.phone.replace(/\D/g, ''))) {
+    } else if (!validatePhoneNumber(signupData.phone)) {
       newErrors.phone = 'Enter valid 10-digit phone number';
     }
 
@@ -410,7 +370,7 @@ const AuthScreen: React.FC = () => {
   };
 
   // ✅ SIGNUP - Send phone WITHOUT space
-  const handleSignup = async (): Promise<void> => {
+  const handleSignupSubmit = async (): Promise<void> => {
     if (!signupData.phone.trim()) {
       Alert.alert('Error', 'Phone number is required');
       return;
@@ -432,66 +392,60 @@ const AuthScreen: React.FC = () => {
       };
 
       console.log('📞 Sending signup payload:', payload);
-      const response = await axios.post<SignupResponse>(
-        `${API_BASE_URL}/auth/signup`,
-        payload,
-      );
+      const result = await handleSignup(payload);
 
-      console.log('✅ Signup response:', response.data);
+      if (result.success) {
+        console.log('✅ Signup response:', result.data);
+        setFullPhoneNumber(phoneWithoutSpace);
+        setAuthMode('verify');
+        setTimer(60);
+        setErrors(prev => ({ ...prev, otp: undefined }));
+        setVerifyData({ otp: ['', '', '', '', '', ''] });
 
-      setFullPhoneNumber(phoneWithoutSpace);
-      setAuthMode('verify');
-      setTimer(60);
-      setErrors(prev => ({ ...prev, otp: undefined }));
-      setVerifyData({ otp: ['', '', '', '', '', ''] });
-
-      if (response.data.otp) {
-        console.log('🔢 Development OTP:', response.data.otp);
+        if (result.data?.otp) {
+          console.log('🔢 Development OTP:', result.data.otp);
+        }
+      } else {
+        Alert.alert('Error', result.error || 'Signup failed');
       }
     } catch (error) {
-      const axiosError = error as AxiosError<{ message: string }>;
-      handleApiError(axiosError, 'Signup failed');
+      const errorMessage = handleApiError(error, 'Signup failed');
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   // ✅ VERIFY OTP - Send phone WITHOUT space
-  const handleVerifyOTP = async (): Promise<void> => {
+  const handleVerifyOTPSubmit = async (): Promise<void> => {
     const otpString = verifyData.otp.join('');
-    if (otpString.length !== 6) {
+
+    if (!validateOTP(verifyData.otp)) {
       setErrors({ otp: 'Please enter 6-digit OTP' });
       return;
     }
 
     setLoading(true);
     try {
-      const payload = {
-        phone: fullPhoneNumber,
-        otp: otpString,
-      };
+      const result = await handleVerifyOTP(fullPhoneNumber, otpString);
 
-      console.log('🔐 Verifying OTP with payload:', payload);
-      const response = await axios.post<VerifyOTPResponse>(
-        `${API_BASE_URL}/auth/verify-otp-signup`,
-        payload,
-      );
+      if (result.success) {
+        console.log('✅ Verify response:', result.data);
 
-      console.log('✅ Verify response:', response.data);
+        if (result.data?.user.isDeveloper) {
+          navigation.navigate('DeveloperHome');
+        } else {
+          navigation.navigate('UserHome');
+        }
 
-      await saveAuthData(response.data.token, response.data.user);
-
-      if (response.data.user.isDeveloper) {
-        navigation.navigate('DeveloperHome');
+        resetForms();
       } else {
-        navigation.navigate('UserHome');
+        Alert.alert('Error', result.error || 'OTP verification failed');
+        setVerifyData({ otp: ['', '', '', '', '', ''] });
       }
-
-      resetForms();
     } catch (error) {
-      const axiosError = error as AxiosError<{ message: string }>;
-      console.error('❌ Verify error:', axiosError.response?.data);
-      handleApiError(axiosError, 'OTP verification failed');
+      const errorMessage = handleApiError(error, 'OTP verification failed');
+      Alert.alert('Error', errorMessage);
       setVerifyData({ otp: ['', '', '', '', '', ''] });
     } finally {
       setLoading(false);
@@ -499,32 +453,28 @@ const AuthScreen: React.FC = () => {
   };
 
   // ✅ RESEND OTP - Send phone WITHOUT space
-  const handleResendOTP = async (): Promise<void> => {
+  const handleResendOTPSubmit = async (): Promise<void> => {
     if (timer > 0) return;
 
     setResendLoading(true);
     try {
-      const payload = { phone: fullPhoneNumber };
-      console.log('📞 Resending OTP for phone:', fullPhoneNumber);
+      const result = await handleResendOTP(fullPhoneNumber);
 
-      const response = await axios.post(
-        `${API_BASE_URL}/auth/resend-otp-signup`,
-        payload,
-      );
+      if (result.success) {
+        console.log('✅ Resend response:', result.data);
+        setTimer(60);
+        setVerifyData({ otp: ['', '', '', '', '', ''] });
+        setErrors(prev => ({ ...prev, otp: undefined }));
 
-      console.log('✅ Resend response:', response.data);
-
-      setTimer(60);
-      setVerifyData({ otp: ['', '', '', '', '', ''] });
-      setErrors(prev => ({ ...prev, otp: undefined }));
-
-      if (response.data.otp) {
-        console.log('🔢 New development OTP:', response.data.otp);
+        if (result.data?.otp) {
+          console.log('🔢 New development OTP:', result.data.otp);
+        }
+      } else {
+        Alert.alert('Error', result.error || 'Failed to resend OTP');
       }
     } catch (error) {
-      const axiosError = error as AxiosError<{ message: string }>;
-      console.error('❌ Resend error:', axiosError.response?.data);
-      handleApiError(axiosError, 'Failed to resend OTP');
+      const errorMessage = handleApiError(error, 'Failed to resend OTP');
+      Alert.alert('Error', errorMessage);
     } finally {
       setResendLoading(false);
     }
@@ -532,25 +482,6 @@ const AuthScreen: React.FC = () => {
 
   const navigateToLogin = () => {
     navigation.navigate('Login');
-  };
-
-  const handleApiError = (
-    error: AxiosError<{ message: string }>,
-    defaultMessage: string,
-  ): void => {
-    console.error('API Error:', error.response?.data || error.message);
-
-    let errorMessage = defaultMessage;
-
-    if (error.response?.data?.message) {
-      errorMessage = error.response.data.message;
-    } else if (error.message.includes('Network Error')) {
-      errorMessage = 'Network error. Please check your connection.';
-    } else if (error.message.includes('timeout')) {
-      errorMessage = 'Request timeout. Please try again.';
-    }
-
-    Alert.alert('Error', errorMessage);
   };
 
   const resetForms = (): void => {
@@ -607,7 +538,7 @@ const AuthScreen: React.FC = () => {
   };
 
   const handleOtpComplete = (otp: string) => {
-    handleVerifyOTP();
+    handleVerifyOTPSubmit();
   };
 
   const DeveloperToggle = () => (
@@ -833,7 +764,7 @@ const AuthScreen: React.FC = () => {
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleSignup}
+        onPress={handleSignupSubmit}
         disabled={loading}
       >
         {loading ? (
@@ -898,7 +829,7 @@ const AuthScreen: React.FC = () => {
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleVerifyOTP}
+        onPress={handleVerifyOTPSubmit}
         disabled={loading}
       >
         {loading ? (
@@ -928,7 +859,7 @@ const AuthScreen: React.FC = () => {
           Didn't receive code?
         </Text>
         <TouchableOpacity
-          onPress={handleResendOTP}
+          onPress={handleResendOTPSubmit}
           disabled={timer > 0 || resendLoading}
         >
           {resendLoading ? (

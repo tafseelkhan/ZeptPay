@@ -5,12 +5,12 @@ import SplashScreen from '../screens/animations/SplashScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 // import UserHomeScreen from '../screens/Home/UserHomeScreen';
-import DeveloperHomeScreen from '../screens/home/test/dev/DeveloperHomeScreen';
-import WebhookHomeScreen from '../screens/home/test/webhook/WebhookHomeScreen';
-import AirCapturedScreen from '../screens/home/test/aircaptured/AirCaputred';
-import WebhookScreen from '../screens/home/test/webhook/WebhookScreen';
-import DeveloperScreen from '../screens/home/test/dev/Developer';
-import SettingScreen from '../screens/home/test/settings/SettingScreen';
+import DeveloperHomeScreen from '../screens/tests/home/dev/DeveloperHomeScreen';
+import WebhookHomeScreen from '../screens/tests/home/webhook/WebhookHomeScreen';
+import ZeptCapturedScreen from '../screens/tests/home/zeptcaptured/zeptcaptured';
+import WebhookScreen from '../screens/tests/home/webhook/WebhookScreen';
+import DeveloperScreen from '../screens/tests/home/dev/Developer';
+import SettingScreen from '../screens/tests/home/settings/SettingScreen';
 
 // ✅ Complete RootStackParamList with all screens
 export type RootStackParamList = {
@@ -20,7 +20,7 @@ export type RootStackParamList = {
   UserHome: undefined;
   DeveloperHome: undefined;
   WebhookHomeScreen: undefined;
-  AirCaptured: undefined;
+  ZeptCaptured: undefined;
   Webhook: undefined;
   Developers: undefined;
   SettingScreen: undefined;
@@ -41,7 +41,7 @@ export default function AppNavigator() {
         {/* <Stack.Screen name="UserHome" component={UserHomeScreen} /> */}
         <Stack.Screen name="DeveloperHome" component={DeveloperHomeScreen} />
         <Stack.Screen name="WebhookHomeScreen" component={WebhookHomeScreen} />
-        <Stack.Screen name="AirCaptured" component={AirCapturedScreen} />
+        <Stack.Screen name="ZeptCaptured" component={ZeptCapturedScreen} />
         <Stack.Screen name="Webhook" component={WebhookScreen} />
         <Stack.Screen name="Developers" component={DeveloperScreen} />
         <Stack.Screen name="SettingScreen" component={SettingScreen} />
