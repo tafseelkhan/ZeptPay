@@ -49,7 +49,7 @@ export interface Prediction {
 export const submitDeveloperAppAPI = async (
   data: DeveloperFormData,
 ): Promise<any> => {
-  const token = getToken();
+  const token = await getToken();
   const response = await axios.post(
     `${API_BASE_URL}${API_ENDPOINTS.DEVELOPER_APPLICATION}`,
     data,

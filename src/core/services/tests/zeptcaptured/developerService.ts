@@ -4,8 +4,8 @@ import {
   searchPlacesAPI,
   getPlaceDetailsAPI,
   DeveloperFormData,
-} from '../../../api/tests/features/private/zeptcapturePrivateSlice';
-import { getUserDataAPI } from '../../../api/tests/features/private/userdataPrivateSlice';
+} from '../../../../api/tests/features/private/zeptcapturePrivateSlice';
+import { getUserDataAPI } from '../../../../api/tests/features/private/userdataPrivateSlice';
 import { CountryCode } from 'react-native-country-picker-modal';
 import { Platform } from 'react-native';
 

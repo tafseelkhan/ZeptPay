@@ -117,7 +117,7 @@ export const Step4Enable: React.FC<Step4EnableProps> = ({ onEnable }) => {
       {/* Lottie Animation as background - Fixed */}
       <View style={StyleSheet.absoluteFill}>
         <LottieView
-          source={require('../../../../animations/lotties/Female creative artist with ideas.json')}
+          source={require('../../../../core/components/animations/lotties/Female creative artist with ideas.json')}
           autoPlay
           loop
           style={styles.lottieBackground}

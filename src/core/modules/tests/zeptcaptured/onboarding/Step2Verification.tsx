@@ -12,7 +12,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 import LinearGradient from 'react-native-linear-gradient';
 import CountryPicker from 'react-native-country-picker-modal';
-import { getCountryCode } from '../../../services/zeptcaptured/developerService';
+import { getCountryCode } from '../../../../services/tests/zeptcaptured/developerService';
 import { ImageData } from '../../../../utils/tests/zeptcaptured/developerUtils';
 
 interface Step2Props {

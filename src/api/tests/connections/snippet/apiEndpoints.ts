@@ -5,18 +5,18 @@
 
 export const API_ENDPOINTS = {
   // Verify User endpoints
-  AUTH_CHECK: '/auth/check',
+  AUTH_CHECK: '/api/auth/check',
 
   // Auth endpoints
-  SIGNUP: '/auth/signup',
-  VERIFY_OTP_SIGNUP: '/auth/verify-otp-signup',
-  RESEND_OTP_SIGNUP: '/auth/resend-otp-signup',
-  LOGIN: '/auth/login',
-  VERIFY_OTP_LOGIN: '/auth/verify-otp-login',
-  RESEND_OTP_LOGIN: '/auth/resend-otp-login',
+  SIGNUP: '/api/auth/signup',
+  VERIFY_OTP_SIGNUP: '/api/auth/verify-otp-signup',
+  RESEND_OTP_SIGNUP: '/api/auth/resend-otp-signup',
+  LOGIN: '/api/auth/login',
+  VERIFY_OTP_LOGIN: '/api/auth/verify-otp-login',
+  RESEND_OTP_LOGIN: '/api/auth/resend-otp-login',
 
   // User endpoints
-  USER_DATA: '/api/auth/user',
+  USER_DATA: '/api/auth/user/me',
   USER_INFO: '/api/test-live/api-keys/user',
 
   // ZeptCaptured endpoints

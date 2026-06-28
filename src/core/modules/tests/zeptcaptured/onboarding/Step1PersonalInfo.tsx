@@ -11,7 +11,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 import CountryPicker, { CountryCode } from 'react-native-country-picker-modal';
 import LinearGradient from 'react-native-linear-gradient';
-import { getCountryCode } from '../../../services/zeptcaptured/developerService';
+import { getCountryCode } from '../../../../services/tests/zeptcaptured/developerService';
 
 interface Step1Props {
   formData: any;

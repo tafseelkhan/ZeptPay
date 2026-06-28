@@ -141,8 +141,9 @@ const SettingsScreen = () => {
     setSearchResults(results);
   };
 
-  // User Profile Component
+  // User Profile Component - FIXED VERSION
   const UserProfile = () => {
+    // Show loading state
     if (loading) {
       return (
         <View
@@ -161,9 +162,20 @@ const SettingsScreen = () => {
       );
     }
 
-    const currencySymbol = getCurrencySymbol(userData?.user.country || '');
-    const modeInfo = getModeInfo(userData?.user?.isLive || false);
-    const avatarInitial = getAvatarInitials(userData?.user?.name || 'User');
+    // Safe data extraction with null checks - FIXED
+    // allow access to dynamic user properties (balance, country, etc.)
+    const user: any = userData?.user ?? {};
+    const country = user?.country || '';
+    const isLive = user?.isLive || false;
+    const name = user?.name || 'User';
+    const email = user?.email || 'user@example.com';
+    const phone = user?.phone || 'N/A';
+    const avatar = user?.avatar || null;
+    const balance = user?.balance || 0;
+
+    const currencySymbol = getCurrencySymbol(country);
+    const modeInfo = getModeInfo(isLive);
+    const avatarInitial = getAvatarInitials(name);
 
     return (
       <View
@@ -176,11 +188,8 @@ const SettingsScreen = () => {
           <View
             style={[styles.avatar, { backgroundColor: theme.primary + '20' }]}
           >
-            {userData?.user?.avatar ? (
-              <Image
-                source={{ uri: userData.user?.avatar }}
-                style={styles.avatarImage}
-              />
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.avatarImage} />
             ) : (
               <Text style={[styles.avatarText, { color: theme.primary }]}>
                 {avatarInitial}
@@ -188,11 +197,9 @@ const SettingsScreen = () => {
             )}
           </View>
           <View style={styles.userText}>
-            <Text style={[styles.userName, { color: theme.text }]}>
-              {userData?.user?.name || 'User'}
-            </Text>
+            <Text style={[styles.userName, { color: theme.text }]}>{name}</Text>
             <Text style={[styles.userEmail, { color: theme.textSecondary }]}>
-              {userData?.user?.email || 'user@example.com'}
+              {email}
             </Text>
             <View style={styles.userMetaRow}>
               <View style={styles.userMetaBadge}>
@@ -204,7 +211,7 @@ const SettingsScreen = () => {
                 <Text
                   style={[styles.userMetaText, { color: theme.textSecondary }]}
                 >
-                  {userData?.user?.phone || 'N/A'}
+                  {phone}
                 </Text>
               </View>
               <View style={styles.userMetaBadge}>
@@ -216,7 +223,7 @@ const SettingsScreen = () => {
                 <Text
                   style={[styles.userMetaText, { color: theme.textSecondary }]}
                 >
-                  {userData?.user?.country || 'N/A'}
+                  {country || 'N/A'}
                 </Text>
               </View>
             </View>
@@ -240,7 +247,7 @@ const SettingsScreen = () => {
               color={theme.success}
             />
             <Text style={[styles.statValue, { color: theme.text }]}>
-              {formatBalance(userData?.user?.balance || 0, currencySymbol)}
+              {formatBalance(balance, currencySymbol)}
             </Text>
             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
               Balance

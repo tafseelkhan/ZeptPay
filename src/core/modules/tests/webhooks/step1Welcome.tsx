@@ -145,7 +145,7 @@ export const Step1Welcome: React.FC<StepProps> = ({
 
       {/* Lottie Animation as background */}
       <LottieView
-        source={require('../../../../animations/lotties/Teacher girl woman tapping phone.json')}
+        source={require('../../../../core/components/animations/lotties/Teacher girl woman tapping phone.json')}
         autoPlay
         loop
         style={StyleSheet.absoluteFill}

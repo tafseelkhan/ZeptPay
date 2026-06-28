@@ -20,7 +20,7 @@ export interface UserResponse {
 
 // ✅ Get User Data
 export const getUserDataAPI = async (): Promise<UserResponse> => {
-  const token = getToken();
+  const token = await getToken();
   const response = await axios.get(
     `${API_BASE_URL}${API_ENDPOINTS.USER_DATA}`,
     {

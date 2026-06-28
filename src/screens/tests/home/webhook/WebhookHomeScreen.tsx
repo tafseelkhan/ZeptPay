@@ -1,6 +1,6 @@
 // app/webhook/index.tsx or wherever you're using Webhook
 import React from "react";
-import WebhookHomeScreen from "../../../../core/components/tests/home/tests/webhook/web/WebhookHome";
+import WebhookHomeScreen from "../../../../core/components/tests/home/webhook/web/WebhookHome";
 
 export default function WebhookHome() {
   return <WebhookHomeScreen />;

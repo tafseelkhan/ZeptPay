@@ -148,7 +148,7 @@ export const Step2Instructions: React.FC<StepProps> = ({
       {/* Lottie Animation as background - Fixed position */}
       <View style={StyleSheet.absoluteFill}>
         <LottieView
-          source={require('../../../../animations/lotties/Girl doing remote job using laptop.json')}
+          source={require('../../../../core/components/animations/lotties/Girl doing remote job using laptop.json')}
           autoPlay
           loop
           style={styles.lottieBackground}

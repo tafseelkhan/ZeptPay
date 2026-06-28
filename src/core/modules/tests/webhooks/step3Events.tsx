@@ -174,7 +174,7 @@ export const Step3Events: React.FC<Step3EventsProps> = ({
       {/* Lottie Animation as background - Fixed */}
       <View style={StyleSheet.absoluteFill}>
         <LottieView
-          source={require('../../../../animations/lotties/A Woman experiences modern metaverse technology.json')}
+          source={require('../../../../core/components/animations/lotties/A Woman experiences modern metaverse technology.json')}
           autoPlay
           loop
           style={styles.lottieBackground}

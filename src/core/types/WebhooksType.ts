@@ -10,6 +10,12 @@ export interface WebhookEvent {
   }[];
 }
 
+export interface StepProps {
+  currentStep: number;
+  totalSteps: number;
+  onNext: () => void;  // Add this line
+  // Add any other common props here
+}
 export interface WebhookData {
   _id: string;
   developerUserId: string;
